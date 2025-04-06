@@ -97,10 +97,10 @@ class StreamManager:
         # 使用多GPU配置
         self.load_model_with_multiple_gpus()
         
-        self.ref_path_video_default = "assets/ref_audios/video_default.wav"
-        self.ref_path_default = "assets/ref_audios/default.wav"
-        self.ref_path_female = "assets/ref_audios/female_example.wav"
-        self.ref_path_male = "assets/ref_audios/male_example.wav"
+        self.ref_path_video_default = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/video_default.wav"
+        self.ref_path_default = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/default.wav"
+        self.ref_path_female = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/female_example.wav"
+        self.ref_path_male = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/male_example.wav"
         
         self.input_audio_id = 0
         self.input_audio_vad_id = 0
