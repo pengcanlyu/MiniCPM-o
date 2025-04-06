@@ -14,10 +14,11 @@ import argparse
 import logging
 import torch
 from PIL import Image
-from transformers import AutoModel, AutoTokenizer, AutoProcessor
+from transformers import AutoModel, AutoTokenizer, AutoProcessor, AutoConfig
 import uvicorn
 from fastapi import FastAPI, Header, Query, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
+from accelerate import init_empty_weights, infer_auto_device_map, load_checkpoint_in_model, dispatch_model, load_checkpoint_and_dispatch
 
 cur_path = os.path.split(os.path.realpath(__file__))[0]
 sys.path.append(os.path.abspath(cur_path))
@@ -88,17 +89,14 @@ class StreamManager:
 
         # Omni model
         self.target_dtype = torch.bfloat16
-        self.device='cuda:0'
+        # 不再使用单一设备，而是使用device_map
         
         self.minicpmo_model_path = args.model #"openbmb/MiniCPM-o-2_6"
         self.model_version = "2.6"
-        with torch.no_grad():
-            self.minicpmo_model = AutoModel.from_pretrained(self.minicpmo_model_path, trust_remote_code=True, torch_dtype=self.target_dtype, attn_implementation='sdpa')
-        self.minicpmo_tokenizer = AutoTokenizer.from_pretrained(self.minicpmo_model_path, trust_remote_code=True)
-        self.minicpmo_model.init_tts()
-        # self.minicpmo_model.tts.float()
-        self.minicpmo_model.to(self.device).eval()
-
+        
+        # 使用多GPU配置
+        self.load_model_with_multiple_gpus()
+        
         self.ref_path_video_default = "assets/ref_audios/video_default.wav"
         self.ref_path_default = "assets/ref_audios/default.wav"
         self.ref_path_female = "assets/ref_audios/female_example.wav"
@@ -126,7 +124,90 @@ class StreamManager:
         self.past_session_id = 0
         self.sys_prompt_init(0)
         self.session_id += 1
+    
+    def load_model_with_multiple_gpus(self):
+        """使用多GPU加载模型，将模型层分发到不同GPU"""
+        logger.info("Loading model on multiple GPUs (cuda:0 and cuda:1)")
         
+        # 配置每个GPU的最大内存使用
+        max_memory_each_gpu = '12GiB'
+        gpu_device_ids = [0, 1]  # 使用两个GPU
+        max_memory = {i: max_memory_each_gpu for i in gpu_device_ids}
+        
+        # 加载配置
+        config = AutoConfig.from_pretrained(
+            self.minicpmo_model_path,
+            trust_remote_code=True
+        )
+        
+        # 加载tokenizer
+        self.minicpmo_tokenizer = AutoTokenizer.from_pretrained(
+            self.minicpmo_model_path, 
+            trust_remote_code=True
+        )
+        
+        # 创建空模型并获取自动device_map
+        with init_empty_weights():
+            model = AutoModel.from_config(
+                config,
+                torch_dtype=self.target_dtype,
+                trust_remote_code=True
+            )
+        
+        # 推断设备映射
+        no_split_module_classes = ["LlamaDecoderLayer"]
+        device_map = infer_auto_device_map(
+            model,
+            max_memory=max_memory,
+            no_split_module_classes=no_split_module_classes
+        )
+        
+        # 确保特定层位于GPU 0
+        # 第0层必须放在GPU 0
+        if 'llm.model.layers.0' in device_map:
+            device_map['llm.model.layers.0'] = 0
+        
+        # 添加其他必须放在GPU 0的顶层组件
+        if 'llm.model.embed_tokens' in device_map:
+            device_map['llm.model.embed_tokens'] = 0  # 嵌入层放在GPU 0
+        if 'llm.model.norm' in device_map:
+            device_map['llm.model.norm'] = 0
+        if 'llm.lm_head' in device_map:
+            device_map['llm.lm_head'] = 0
+        
+        # 将全部视觉相关模块放到GPU 0
+        if 'vpm' in device_map:
+            device_map['vpm'] = 0
+        if 'resampler' in device_map:
+            device_map['resampler'] = 0
+        
+        # 将音频相关模块放到GPU 0
+        if 'apm' in device_map:
+            device_map['apm'] = 0
+        if 'audio_avg_pooler' in device_map:
+            device_map['audio_avg_pooler'] = 0
+        if 'audio_projection_layer' in device_map:
+            device_map['audio_projection_layer'] = 0
+        
+        # 将TTS模块放到GPU 0
+        if 'tts' in device_map:
+            device_map['tts'] = 0
+        
+        logger.info(f"Device map: {device_map}")
+        
+        # 加载模型并分发到各个设备
+        self.minicpmo_model = load_checkpoint_and_dispatch(
+            model,
+            self.minicpmo_model_path,
+            device_map=device_map,
+            offload_folder=None,
+            offload_state_dict=False,
+            dtype=self.target_dtype
+        )
+        
+        # 初始化TTS
+        self.minicpmo_model.init_tts()
+        self.minicpmo_model.eval()
         
     def start_conversation(self):
         logger.info(f"uid {self.uid}: new conversation started.")
