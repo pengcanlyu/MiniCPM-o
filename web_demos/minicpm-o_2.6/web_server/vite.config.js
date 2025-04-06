@@ -9,8 +9,6 @@ import IconsResolver from 'unplugin-icons/resolver';
 import AutoImport from 'unplugin-auto-import/vite';
 import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
-import fs from 'fs';
-import path from 'path';
 
 export default defineConfig({
     plugins: [
@@ -57,11 +55,7 @@ export default defineConfig({
         }
     },
     server: {
-        https: {
-            key: fs.readFileSync(path.resolve(__dirname, 'key.pem')),
-            cert: fs.readFileSync(path.resolve(__dirname, 'cert.pem')),
-        },
-        host: '0.0.0.0',
+        host: '127.0.0.1',
         port: 8088,
         proxy: {
             '/api/v1': {
