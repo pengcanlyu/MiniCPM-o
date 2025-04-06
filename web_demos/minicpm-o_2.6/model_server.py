@@ -146,7 +146,7 @@ class StreamManager:
             trust_remote_code=True
         )
         
-        # 创建空模型并获取自动device_map
+        # 创建空模型
         with init_empty_weights():
             model = AutoModel.from_config(
                 config,
@@ -154,44 +154,37 @@ class StreamManager:
                 trust_remote_code=True
             )
         
-        # 推断设备映射
-        no_split_module_classes = ["LlamaDecoderLayer"]
-        device_map = infer_auto_device_map(
-            model,
-            max_memory=max_memory,
-            no_split_module_classes=no_split_module_classes
-        )
+        # 手动设置设备映射，不再使用infer_auto_device_map自动分配
+        device_map = {}
+        
+        # 将llm.model.layers.0~7放在cuda:0上
+        for i in range(8):
+            device_map[f'llm.model.layers.{i}'] = 0
+        
+        # 模型的总层数
+        total_layers = 28  
+        
+        # 将剩余的llm.model.layers放在cuda:1上
+        for i in range(8, total_layers):
+            device_map[f'llm.model.layers.{i}'] = 1
         
         # 确保特定层位于GPU 0
-        # 第0层必须放在GPU 0
-        if 'llm.model.layers.0' in device_map:
-            device_map['llm.model.layers.0'] = 0
-        
-        # 添加其他必须放在GPU 0的顶层组件
-        if 'llm.model.embed_tokens' in device_map:
-            device_map['llm.model.embed_tokens'] = 0  # 嵌入层放在GPU 0
-        if 'llm.model.norm' in device_map:
-            device_map['llm.model.norm'] = 0
-        if 'llm.lm_head' in device_map:
-            device_map['llm.lm_head'] = 0
+        # 添加必须放在GPU 0的顶层组件
+        device_map['llm.model.embed_tokens'] = 0  # 嵌入层放在GPU 0
+        device_map['llm.model.norm'] = 0
+        device_map['llm.lm_head'] = 0
         
         # 将全部视觉相关模块放到GPU 0
-        if 'vpm' in device_map:
-            device_map['vpm'] = 0
-        if 'resampler' in device_map:
-            device_map['resampler'] = 0
+        device_map['vpm'] = 0
+        device_map['resampler'] = 0
         
         # 将音频相关模块放到GPU 0
-        if 'apm' in device_map:
-            device_map['apm'] = 0
-        if 'audio_avg_pooler' in device_map:
-            device_map['audio_avg_pooler'] = 0
-        if 'audio_projection_layer' in device_map:
-            device_map['audio_projection_layer'] = 0
+        device_map['apm'] = 0
+        device_map['audio_avg_pooler'] = 0
+        device_map['audio_projection_layer'] = 0
         
         # 将TTS模块放到GPU 0
-        if 'tts' in device_map:
-            device_map['tts'] = 0
+        device_map['tts'] = 0
         
         logger.info(f"Device map: {device_map}")
         
