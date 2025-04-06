@@ -97,10 +97,10 @@ class StreamManager:
         # 使用多GPU配置
         self.load_model_with_multiple_gpus()
         
-        self.ref_path_video_default = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/video_default.wav"
-        self.ref_path_default = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/default.wav"
-        self.ref_path_female = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/female_example.wav"
-        self.ref_path_male = "/kaggle/input/minicpm-o-2_6/transformers/minicpm/1/assets/ref_audios/male_example.wav"
+        self.ref_path_video_default = "/kaggle/working/MiniCPM-o/assets/ref_audios/video_default.wav"
+        self.ref_path_default = "/kaggle/working/MiniCPM-o/assets/ref_audios/default.wav"
+        self.ref_path_female = "/kaggle/working/MiniCPM-o/assets/ref_audios/female_example.wav"
+        self.ref_path_male = "/kaggle/working/MiniCPM-o/assets/ref_audios/male_example.wav"
         
         self.input_audio_id = 0
         self.input_audio_vad_id = 0
@@ -130,7 +130,7 @@ class StreamManager:
         logger.info("Loading model on multiple GPUs (cuda:0 and cuda:1)")
         
         # 配置每个GPU的最大内存使用
-        max_memory_each_gpu = '12GiB'
+        max_memory_each_gpu = '10GiB'
         gpu_device_ids = [0, 1]  # 使用两个GPU
         max_memory = {i: max_memory_each_gpu for i in gpu_device_ids}
         
